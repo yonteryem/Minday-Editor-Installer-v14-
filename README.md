@@ -1,1 +1,1 @@
-# Minday-Editor-Installer-v14-
+© Minday Editor 
