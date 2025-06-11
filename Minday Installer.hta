@@ -1,0 +1,185 @@
+<html>
+<head>
+<title>Minday Installer</title>
+<HTA:APPLICATION 
+  ID="MindayInstaller"
+  APPLICATIONNAME="MindayInstaller"
+  BORDER="dialog"
+  CAPTION="yes"
+  CONTEXTMENU="no"
+  ICON=""
+  MAXIMIZEBUTTON="no"
+  MINIMIZEBUTTON="no"
+  SCROLL="no"
+  SHOWINTASKBAR="yes"
+  SINGLEINSTANCE="yes"
+  SYSMENU="yes"
+  WINDOWSTATE="normal"
+  INNERBORDER="no"
+  SELECTION="no">
+<style>
+body {
+  background: #121212;
+  color: #f5f5f5;
+  font-family: 'Segoe UI', sans-serif;
+  padding: 20px;
+  width: 350px;
+  height: 280px;
+  overflow: hidden;
+}
+h2 { margin-top: 0; }
+button {
+  padding: 10px 20px;
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  margin-top: 10px;
+}
+button:hover {
+  background-color: #1976d2;
+}
+#progressContainer {
+  width: 100%;
+  height: 20px;
+  background-color: #333;
+  border-radius: 5px;
+  margin-top: 15px;
+}
+#progressBar {
+  height: 100%;
+  width: 0%;
+  background-color: #4caf50;
+  border-radius: 5px;
+  transition: width 0.4s;
+}
+#progressLabel {
+  margin-top: 5px;
+  text-align: center;
+}
+#finishBtn {
+  display: none;
+}
+</style>
+<script language="vbscript">
+Dim currentProgress, fso, shell, wsh, installPath, appFolder, tempFolder, iconsMoved
+Sub Window_OnLoad()
+  window.resizeTo 400, 300
+  window.moveTo (screen.width-400)/2, (screen.height-300)/2
+End Sub
+
+Sub SetProgress(p)
+  progressBar.style.width = p & "%"
+  progressLabel.innerText = p & "%"
+End Sub
+
+Sub FakeProgress()
+  currentProgress = 0
+  iconsMoved = False
+  ProgressStep
+End Sub
+
+Sub ProgressStep()
+  If currentProgress < 100 Then
+    currentProgress = currentProgress + Int(Rnd * 10 + 5)
+    If currentProgress > 100 Then currentProgress = 100
+    SetProgress currentProgress
+
+    ' Move icons around 80-90%
+    If currentProgress >= 80 And Not iconsMoved Then
+      iconsMoved = True
+      On Error Resume Next
+      If fso.FileExists(tempFolder & "\MindayEditor.ico") Then
+        fso.CopyFile tempFolder & "\MindayEditor.ico", appFolder & "\MindayEditor.ico", True
+      End If
+      If fso.FileExists(tempFolder & "\MEFile.ico") Then
+        fso.CopyFile tempFolder & "\MEFile.ico", appFolder & "\MEFile.ico", True
+      End If
+    End If
+
+    window.setTimeout "ProgressStep", 500
+  Else
+    progressLabel.innerText = "Done"
+    finishBtn.style.display = "inline-block"
+  End If
+End Sub
+
+Sub install()
+  On Error Resume Next
+  SetProgress 0
+  Set fso = CreateObject("Scripting.FileSystemObject")
+  Set shell = CreateObject("Shell.Application")
+  Set wsh = CreateObject("WScript.Shell")
+
+  Dim folderPicker
+  Set folderPicker = shell.BrowseForFolder(0, "Choose folder to install Minday Editor", 0)
+  If folderPicker Is Nothing Then Exit Sub
+
+  installPath = folderPicker.Self.Path
+  appFolder = installPath & "\Minday Editor"
+  If Not fso.FolderExists(appFolder) Then fso.CreateFolder(appFolder)
+
+  tempFolder = wsh.ExpandEnvironmentStrings("%TEMP%") & "\MindayTemp"
+  If Not fso.FolderExists(tempFolder) Then fso.CreateFolder(tempFolder)
+
+  ' Start visual progress
+  FakeProgress
+
+  ' Download icons now (updated to GitHub raw URLs)
+  DownloadFile "https://raw.githubusercontent.com/yonteryem/Minday-Editor-Icons/main/mindayeditorappicon.ico", tempFolder & "\MindayEditor.ico"
+  DownloadFile "https://raw.githubusercontent.com/yonteryem/Minday-Editor-Icons/main/mindayeditorfile.ico", tempFolder & "\MEFile.ico"
+
+  ' Create BAT launcher
+  Dim bat
+  Set bat = fso.CreateTextFile(appFolder & "\MindayEditor.bat", True)
+  bat.WriteLine "start msedge.exe --app=""https://sites.google.com/view/mindayedit/"""
+  bat.Close
+
+  ' Create Desktop Shortcut
+  Dim shortcut
+  Set shortcut = wsh.CreateShortcut(wsh.SpecialFolders("Desktop") & "\Minday Editor.lnk")
+  shortcut.TargetPath = appFolder & "\MindayEditor.bat"
+  shortcut.IconLocation = tempFolder & "\MindayEditor.ico"
+  shortcut.Save
+
+  ' File association
+  AssociateFile appFolder & "\MindayEditor.bat", appFolder & "\MEFile.ico"
+End Sub
+
+Sub DownloadFile(url, path)
+  On Error Resume Next
+  Dim xhr, stream
+  Set xhr = CreateObject("MSXML2.XMLHTTP")
+  xhr.Open "GET", url, False
+  xhr.Send
+  If xhr.Status = 200 Then
+    Set stream = CreateObject("ADODB.Stream")
+    stream.Type = 1
+    stream.Open
+    stream.Write xhr.ResponseBody
+    stream.SaveToFile path, 2
+    stream.Close
+  End If
+End Sub
+
+Sub AssociateFile(batPath, iconPath)
+  On Error Resume Next
+  Dim wsh
+  Set wsh = CreateObject("WScript.Shell")
+  wsh.RegWrite "HKCU\Software\Classes\.me\", "MindayEditor.me", "REG_SZ"
+  wsh.RegWrite "HKCU\Software\Classes\MindayEditor.me\", "Minday File", "REG_SZ"
+  wsh.RegWrite "HKCU\Software\Classes\MindayEditor.me\DefaultIcon\", iconPath, "REG_SZ"
+  wsh.RegWrite "HKCU\Software\Classes\MindayEditor.me\shell\open\command\", """" & batPath & """ ""%1""", "REG_SZ"
+End Sub
+</script>
+</head>
+<body>
+  <h2>Minday Installer</h2>
+  <p>Install the Minday Editor app on your computer.</p>
+  <button onclick="install">Install</button>
+  <div id="progressContainer"><div id="progressBar"></div></div>
+  <div id="progressLabel">0%</div>
+  <button id="finishBtn" onclick="self.close">Finish</button>
+</body>
+</html>
